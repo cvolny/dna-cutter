@@ -8,7 +8,7 @@ import sys
 import typing as t
 
 
-VERSION = 1.0
+VERSION = 1.1
 
 
 class CutterT(t.NamedTuple):
@@ -21,28 +21,51 @@ class CutterT(t.NamedTuple):
     split_at: int
 
 
+class Cutters(object):
+    cutters: tuple[CutterT]
+    _longest_cutter: int = -1
+
+    def __init__(
+        self,
+        cutters: t.Iterable[CutterT],
+    ):
+        self.cutters = tuple(cutters)
+
+    def get_longest_cutter(self):
+        if self._longest_cutter < 0:
+            longest = -1
+            for cutter in self.cutters:
+                if (curlen := len(cutter.seq)) > longest:
+                    longest = curlen
+            self._longest_cutter = longest
+        return self._longest_cutter
+
+
 def parse_cutter_file(
     cutter_file: t.IO,
     sep: str = "|",
-) -> list[CutterT]:
+) -> Cutters:
     """
     Parses a cutter control file into a list of CutterT.
 
     Sequences are defined in the format A|GTC AG|TC when sep=|.
     """
     cutter_strs: list[str] = cutter_file.readlines()
-    return [
-        CutterT(
-            seq=cutter_str.replace(sep, "").strip(),
-            split_at=cutter_str.find(sep),
-        )
-        for cutter_str in cutter_strs
-    ]
+    return Cutters(
+        [
+            CutterT(
+                seq=cutter_str.replace(sep, "").strip(),
+                split_at=cutter_str.find(sep),
+            )
+            for cutter_str in cutter_strs
+            if cutter_str
+        ]
+    )
 
 
 def cut_sequence_at_cutters(
     data: str,
-    cutters: t.Sequence[CutterT],
+    cutters: Cutters,
     outfile: t.IO,
 ) -> str:
     """
@@ -54,7 +77,7 @@ def cut_sequence_at_cutters(
     """
     lowest_splitloc = len(data)
     lowest_cutter = None
-    for cutter in cutters:
+    for cutter in cutters.cutters:
         if (findloc := data.find(cutter.seq)) != -1:
             splitloc = findloc + cutter.split_at
             if splitloc < lowest_splitloc:
@@ -73,7 +96,7 @@ def cut_sequence_at_cutters(
 
 def parse_dna_file(
     infile: t.IO,
-    cutters: t.Sequence[CutterT],
+    cutters: Cutters,
     chunksize: int = 1024,
     outfile: t.IO = sys.stdout,
 ) -> None:
@@ -129,11 +152,11 @@ def main():
     args = parser.parse_args()
 
     # parse cutter rules from cutter_filename to cutters
-    cutters = []
+    cutters: Cutters
     with open(args.cutter_filename, "r", encoding=args.encoding) as cutter_file:
         cutters = parse_cutter_file(
             cutter_file,
-            sep=args.cutter_separator,
+            #sep=args.cutter_separator,
         )
 
     # parse dna stream into sequences based cutter rules parsed earlier
